@@ -1,0 +1,127 @@
+const pg = require("pg")
+const client = new pg.Client('postgres://localhost/demo')
+const morgan = require("morgan")
+const cors = require("cors")
+const express = require("express")
+const app = express()
+app.use(cors())
+app.use(express.json())
+app.use(morgan("dev"))
+
+app.get(`/api/monsters`, async(req, res, next)=>{
+    try{
+        const SQL = `
+            SELECT *
+            FROM monsters
+        `;
+        const response = await client.query(SQL)
+        res.send(response.rows)
+    }catch(error){
+        next(error)
+    }
+})
+
+app.get('/api/monsters/:id', async(req,res,next)=>{
+    try{
+        const SQL = `
+            SELECT *
+            FROM monsters
+            WHERE id = $1
+        `;
+        const response = await client.query(SQL,[req.params.id])
+        if(response.rows.length === 0){
+            throw new Error("ID does not exist")
+        }
+
+        res.send(response.rows[0])
+    
+    }
+    catch (error){
+        next(error)
+    }
+})
+
+app.delete('/api/monsters/:id', async(req,res,next)=>{
+    try{
+        const SQL = `
+            DELETE
+            FROM monsters
+            WHERE id=$1
+        `;
+        const response = await client.query(SQL,[req.params.id])
+        res.send(response.rows)
+    }
+    catch (error){
+        next(error)
+    }
+})
+
+app.post('/api/monsters', async(req, res, next)=>{
+    //axios.post('link', {name, pet, region})
+    const body = req.body
+    console.log(body)
+    try{
+        const SQL =`
+        INSERT INTO monsters(name, pet, region)
+        VALUES($1, $2, $3)
+        RETURNING *
+
+        `;
+        const response = await client.query(SQL, [req.body.name, req.body.pet, req.body.region])
+        res.send(response.rows)
+    }catch(error){
+        next(error)
+    }
+})
+
+app.put('/api/monsters/:id', async (req, res, next)=>{
+    try{
+        const SQL =`
+        UPDATE monsters
+        SET name = $1, pet = $2, region = $3
+        WHERE id = $4
+        RETURNING *
+
+        `;
+        const response = await client.query(SQL, [req.body.name, req.body.pet, req.body.region, req.params.id])
+        res.send(response.rows)
+    }catch(error){
+        next(error)
+    }
+})
+
+app.use('*', (req, res, next)=>{
+    res.status(404).send("InvalidRoute")
+})
+app.use((err, req, res, next)=>{
+    console.log('error handler')
+    res.status(500).send(err.message)
+})
+
+const start = async () =>{
+    await client.connect()
+    console.log("conected to db")
+    const SQL = `
+        DROP TABLE IF EXISTS monsters;
+        CREATE TABLE monsters(
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100),
+            pet VARCHAR(100),
+            region VARCHAR(100)
+        );
+        INSERT INTO monsters (name, pet, region) VALUES ('dracula', 'bat', 'transylvania');
+        INSERT INTO monsters (name, pet, region) VALUES ('werewolf', 'wolf', 'london');
+        INSERT INTO monsters (name, pet, region) VALUES ('frankenstein', 'bird', 'transylvania');
+       
+    `
+    await client.query(SQL)
+    console.log("table seeded")
+    const PORT = process.env.PORT || 3300
+    app.listen(PORT, ()=>{
+        console.log(`listening on ${PORT}`)
+    })
+}
+
+start()
+
+
